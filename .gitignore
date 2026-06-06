@@ -46,4 +46,4 @@ app.*.map.json
 
 # Claude Code internal files
 .agents/
-.claude/settings.local.json
+.claude/
