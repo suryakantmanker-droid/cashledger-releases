@@ -1,0 +1,51 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isImageType() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    function isPdfType() {
+      return request.resource.contentType == 'application/pdf';
+    }
+
+    function isUnder5MB() {
+      return request.resource.size < 5 * 1024 * 1024;
+    }
+
+    function isUnder10MB() {
+      return request.resource.size < 10 * 1024 * 1024;
+    }
+
+    // ── Profile Images ────────────────────────────────────────────────────
+    // profile_images/{userId}/avatar.jpg
+    match /profile_images/{userId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() &&
+        request.auth.uid == userId &&
+        isImageType() &&
+        isUnder5MB();
+      allow delete: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // ── Expense Bills (images + PDFs) ─────────────────────────────────────
+    // expense_bills/{expenseId}/{fileName}
+    match /expense_bills/{expenseId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() &&
+        (isImageType() || isPdfType()) &&
+        isUnder10MB();
+      allow delete: if isAuthenticated();
+    }
+
+    // ── Default: Deny all ─────────────────────────────────────────────────
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

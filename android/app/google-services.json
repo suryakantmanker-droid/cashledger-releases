@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1037419082747",
+    "project_id": "cashledger-9e954",
+    "storage_bucket": "cashledger-9e954.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1037419082747:android:88e526c10a359de263d15e",
+        "android_client_info": {
+          "package_name": "com.cashledger.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCpnehLsIWIcQSGrT4fjW9AE3J37Qx9LHQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

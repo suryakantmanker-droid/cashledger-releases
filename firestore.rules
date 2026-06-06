@@ -1,0 +1,108 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // HELPER FUNCTIONS
+    // =========================================================================
+
+    function isAuthenticated() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isOnlyUpdating(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+
+    // =========================================================================
+    // USER TOKENS — FCM token storage
+    // Each user owns and can read/write only their own token document.
+    // =========================================================================
+
+    match /user_tokens/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // =========================================================================
+    // SETTINGS — Global app config (read-only for authenticated users)
+    // Writes are blocked from clients — use Supabase or Admin SDK for updates.
+    // =========================================================================
+
+    match /settings/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    // =========================================================================
+    // LEGACY NOTIFICATIONS (top-level /notifications collection)
+    //
+    // This collection was the original notification path before Phase 3.
+    // It is now READ-ONLY for migration purposes. New writes go to
+    // businesses/{businessId}/notifications/.
+    //
+    // After all legacy notifications are migrated or expired, this block
+    // can be changed to: allow read, write: if false;
+    // =========================================================================
+
+    match /notifications/{notifId} {
+      // Users can read their own legacy notifications
+      allow read: if isAuthenticated()
+                  && resource.data.userId == request.auth.uid;
+
+      // Users can mark their own legacy notifications as read (migration support)
+      allow update: if isAuthenticated()
+                    && resource.data.userId == request.auth.uid
+                    && isOnlyUpdating(['isRead']);
+
+      // New writes blocked — redirect to businesses/{businessId}/notifications
+      allow create: if false;
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // BUSINESS-SCOPED NOTIFICATIONS (Phase 3+)
+    // Path: businesses/{businessId}/notifications/{notifId}
+    //
+    // Security model:
+    //   - Read: only the notification's target user (resource.data.userId)
+    //   - Create: any authenticated user (admins notify employees; employees
+    //             notify admins). Full server-side validation via Cloud Functions
+    //             is recommended for stricter control.
+    //   - Update: target user can only set isRead = true
+    //   - Delete: never (notification history is immutable)
+    // =========================================================================
+
+    match /businesses/{businessId}/notifications/{notifId} {
+
+      allow read: if isAuthenticated()
+                  && resource.data.userId == request.auth.uid;
+
+      allow create: if isAuthenticated()
+                    && request.resource.data.keys().hasAll([
+                         'userId', 'title', 'body', 'type', 'isRead', 'createdAt'
+                       ])
+                    && request.resource.data.isRead == false;
+
+      allow update: if isAuthenticated()
+                    && resource.data.userId == request.auth.uid
+                    && isOnlyUpdating(['isRead'])
+                    && request.resource.data.isRead == true;
+
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // DEFAULT DENY — explicit catch-all
+    // Any path not matched above is blocked for all operations.
+    // This prevents accidental access to undeclared collections.
+    // =========================================================================
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
