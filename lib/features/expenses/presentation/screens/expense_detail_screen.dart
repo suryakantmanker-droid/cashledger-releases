@@ -1,5 +1,7 @@
 ﻿import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -108,12 +110,15 @@ class ExpenseDetailScreen extends ConsumerWidget {
                 _Detail('Category', expense.category),
                 _Detail('Date', AppUtils.formatDate(expense.expenseDate)),
                 _Detail('Payment Method', expense.paymentMethod),
-                if (expense.vendorName != null && expense.vendorName!.isNotEmpty)
+                if (expense.vendorName != null &&
+                    expense.vendorName!.isNotEmpty)
                   _Detail('Vendor', expense.vendorName!),
-                if (expense.description != null && expense.description!.isNotEmpty)
+                if (expense.description != null &&
+                    expense.description!.isNotEmpty)
                   _Detail('Description', expense.description!),
                 _Detail('Submitted By', expense.submittedByName),
-                _Detail('Submitted On', AppUtils.formatDateWithTime(expense.createdAt)),
+                _Detail('Submitted On',
+                    AppUtils.formatDateWithTime(expense.createdAt)),
               ],
             ),
             SizedBox(height: 14.h),
@@ -127,7 +132,8 @@ class ExpenseDetailScreen extends ConsumerWidget {
                     expense.approvedByName ?? '',
                   ),
                   if (expense.approvedAt != null)
-                    _Detail('On', AppUtils.formatDateWithTime(expense.approvedAt!)),
+                    _Detail(
+                        'On', AppUtils.formatDateWithTime(expense.approvedAt!)),
                   if (expense.isRejected && expense.rejectionReason != null)
                     _Detail('Reason', expense.rejectionReason!),
                 ],
@@ -154,7 +160,8 @@ class ExpenseDetailScreen extends ConsumerWidget {
                   separatorBuilder: (_, __) => SizedBox(width: 10.w),
                   itemBuilder: (_, i) {
                     final url = expense.billUrls[i];
-                    final isPdf = url.contains('.pdf') || url.contains('application%2Fpdf');
+                    final isPdf = url.contains('.pdf') ||
+                        url.contains('application%2Fpdf');
 
                     return GestureDetector(
                       onTap: () => _previewBill(context, url, isPdf),
@@ -163,7 +170,8 @@ class ExpenseDetailScreen extends ConsumerWidget {
                         height: 120.h,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Theme.of(context).dividerColor),
+                          border:
+                              Border.all(color: Theme.of(context).dividerColor),
                           color: isPdf
                               ? AppColors.error.withValues(alpha: 0.08)
                               : null,
@@ -193,7 +201,9 @@ class ExpenseDetailScreen extends ConsumerWidget {
                                   loadingBuilder: (_, child, progress) =>
                                       progress == null
                                           ? child
-                                          : const Center(child: CircularProgressIndicator()),
+                                          : const Center(
+                                              child:
+                                                  CircularProgressIndicator()),
                                 ),
                               ),
                       ),
@@ -223,7 +233,8 @@ class ExpenseDetailScreen extends ConsumerWidget {
                   Expanded(
                     child: AppButton(
                       label: 'Approve',
-                      onPressed: () => _showApproveDialog(context, ref, expense.id),
+                      onPressed: () =>
+                          _showApproveDialog(context, ref, expense.id),
                       prefixIcon: Icons.check_circle_rounded,
                     ),
                   ),
@@ -231,7 +242,8 @@ class ExpenseDetailScreen extends ConsumerWidget {
                   Expanded(
                     child: AppButton(
                       label: 'Reject',
-                      onPressed: () => _showRejectDialog(context, ref, expense.id),
+                      onPressed: () =>
+                          _showRejectDialog(context, ref, expense.id),
                       variant: ButtonVariant.danger,
                       prefixIcon: Icons.cancel_rounded,
                     ),
@@ -251,28 +263,32 @@ class ExpenseDetailScreen extends ConsumerWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      enableDrag: false,
       backgroundColor: Colors.transparent,
       builder: (_) => _BillPreviewSheet(url: url, isPdf: isPdf),
     );
   }
 
-  void _showApproveDialog(BuildContext context, WidgetRef ref, String expenseId) {
+  void _showApproveDialog(
+      BuildContext context, WidgetRef ref, String expenseId) {
     final user = ref.read(currentUserProvider).valueOrNull;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Approve Expense?'),
-        content: const Text('Are you sure you want to approve this expense? This will deduct from the employee\'s balance.'),
+        content: const Text(
+            'Are you sure you want to approve this expense? This will deduct from the employee\'s balance.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
               await ref.read(expenseNotifierProvider.notifier).approveExpense(
-                expenseId: expenseId,
-                approvedBy: user?.uid ?? '',
-                approvedByName: user?.name ?? '',
-              );
+                    expenseId: expenseId,
+                    approvedBy: user?.uid ?? '',
+                    approvedByName: user?.name ?? '',
+                  );
               if (context.mounted) context.pop();
             },
             child: const Text('Approve'),
@@ -282,7 +298,8 @@ class ExpenseDetailScreen extends ConsumerWidget {
     );
   }
 
-  void _showRejectDialog(BuildContext context, WidgetRef ref, String expenseId) {
+  void _showRejectDialog(
+      BuildContext context, WidgetRef ref, String expenseId) {
     final user = ref.read(currentUserProvider).valueOrNull;
     final reasonCtrl = TextEditingController();
     showDialog<void>(
@@ -302,18 +319,19 @@ class ExpenseDetailScreen extends ConsumerWidget {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () async {
               if (reasonCtrl.text.trim().isEmpty) return;
               Navigator.pop(ctx);
               await ref.read(expenseNotifierProvider.notifier).rejectExpense(
-                expenseId: expenseId,
-                rejectedBy: user?.uid ?? '',
-                rejectedByName: user?.name ?? '',
-                reason: reasonCtrl.text.trim(),
-              );
+                    expenseId: expenseId,
+                    rejectedBy: user?.uid ?? '',
+                    rejectedByName: user?.name ?? '',
+                    reason: reasonCtrl.text.trim(),
+                  );
               if (context.mounted) context.pop();
             },
             child: const Text('Reject', style: TextStyle(color: Colors.white)),
@@ -409,6 +427,10 @@ class _BillPreviewSheetState extends State<_BillPreviewSheet> {
   bool _isLoading = false;
   String? _error;
 
+  PDFViewController? _pdfController;
+  int _currentPage = 0;
+  int _totalPages = 0;
+
   @override
   void initState() {
     super.initState();
@@ -421,9 +443,19 @@ class _BillPreviewSheetState extends State<_BillPreviewSheet> {
       final dir = await getTemporaryDirectory();
       final path = '${dir.path}/${DateTime.now().millisecondsSinceEpoch}.pdf';
       await Dio().download(widget.url, path);
-      if (mounted) setState(() { _localPdfPath = path; _isLoading = false; });
+      if (mounted) {
+        setState(() {
+          _localPdfPath = path;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      if (mounted) setState(() { _error = 'Failed to load PDF: $e'; _isLoading = false; });
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to load PDF: $e';
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -450,7 +482,6 @@ class _BillPreviewSheetState extends State<_BillPreviewSheet> {
           Padding(
             padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.h),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   widget.isPdf ? 'PDF Bill' : 'Bill Image',
@@ -460,6 +491,26 @@ class _BillPreviewSheetState extends State<_BillPreviewSheet> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+                if (widget.isPdf && _totalPages > 0) ...[
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.chevron_left, color: Colors.white),
+                    onPressed: _currentPage > 0
+                        ? () => _pdfController?.setPage(_currentPage - 1)
+                        : null,
+                  ),
+                  Text(
+                    '${_currentPage + 1} / $_totalPages',
+                    style: const TextStyle(
+                        color: Colors.white70, fontFamily: 'Poppins'),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.chevron_right, color: Colors.white),
+                    onPressed: _currentPage < _totalPages - 1
+                        ? () => _pdfController?.setPage(_currentPage + 1)
+                        : null,
+                  ),
+                ],
                 IconButton(
                   icon: const Icon(Icons.close, color: Colors.white),
                   onPressed: () => Navigator.pop(context),
@@ -484,7 +535,8 @@ class _BillPreviewSheetState extends State<_BillPreviewSheet> {
       loadingBuilder: (_, __) =>
           const Center(child: CircularProgressIndicator(color: Colors.white)),
       errorBuilder: (_, __, ___) => const Center(
-        child: Text('Failed to load image', style: TextStyle(color: Colors.white)),
+        child:
+            Text('Failed to load image', style: TextStyle(color: Colors.white)),
       ),
     );
   }
@@ -497,7 +549,8 @@ class _BillPreviewSheetState extends State<_BillPreviewSheet> {
           children: [
             CircularProgressIndicator(color: Colors.white),
             SizedBox(height: 12),
-            Text('Loading PDF...', style: TextStyle(color: Colors.white70, fontFamily: 'Poppins')),
+            Text('Loading PDF...',
+                style: TextStyle(color: Colors.white70, fontFamily: 'Poppins')),
           ],
         ),
       );
@@ -506,12 +559,15 @@ class _BillPreviewSheetState extends State<_BillPreviewSheet> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(_error!, style: const TextStyle(color: Colors.redAccent), textAlign: TextAlign.center),
+          child: Text(_error!,
+              style: const TextStyle(color: Colors.redAccent),
+              textAlign: TextAlign.center),
         ),
       );
     }
     if (_localPdfPath == null) {
-      return const Center(child: CircularProgressIndicator(color: Colors.white));
+      return const Center(
+          child: CircularProgressIndicator(color: Colors.white));
     }
     return PDFView(
       filePath: _localPdfPath!,
@@ -520,6 +576,20 @@ class _BillPreviewSheetState extends State<_BillPreviewSheet> {
       autoSpacing: true,
       pageFling: true,
       backgroundColor: Colors.black,
+      gestureRecognizers: {
+        Factory<VerticalDragGestureRecognizer>(
+          () => VerticalDragGestureRecognizer(),
+        ),
+        Factory<HorizontalDragGestureRecognizer>(
+          () => HorizontalDragGestureRecognizer(),
+        ),
+      },
+      onViewCreated: (controller) => _pdfController = controller,
+      onRender: (pages) => setState(() => _totalPages = pages ?? 0),
+      onPageChanged: (page, total) => setState(() {
+        _currentPage = page ?? 0;
+        _totalPages = total ?? _totalPages;
+      }),
       onError: (e) => setState(() => _error = e.toString()),
     );
   }

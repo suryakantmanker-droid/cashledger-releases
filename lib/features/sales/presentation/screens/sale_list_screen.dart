@@ -20,7 +20,7 @@ class SaleListScreen extends ConsumerWidget {
     final salesAsync = ref.watch(employeeSalesStreamProvider(user.uid));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('My Sales')),
+      appBar: AppBar(title: const Text('My Collections')),
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(employeeSalesStreamProvider(user.uid));
@@ -38,9 +38,10 @@ class SaleListScreen extends ConsumerWidget {
                     height: constraints.maxHeight,
                     child: EmptyState(
                       icon: Icons.sell_rounded,
-                      title: 'No sales logged yet',
-                      subtitle: 'Log a sale to credit your wallet instantly',
-                      actionLabel: 'Log Sale',
+                      title: 'No Collections logged yet',
+                      subtitle:
+                          'Log a Collections to credit your wallet instantly',
+                      actionLabel: 'Log Collections',
                       onAction: () => context.push(RouteConstants.addSale),
                     ),
                   ),
@@ -64,8 +65,7 @@ class SaleListScreen extends ConsumerWidget {
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                          color: Theme.of(context).dividerColor),
+                      border: Border.all(color: Theme.of(context).dividerColor),
                     ),
                     child: Row(
                       children: [

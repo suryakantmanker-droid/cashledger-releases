@@ -769,7 +769,7 @@ class _EmployeeShellState extends ConsumerState<EmployeeShell> {
             NavigationDestination(
               icon: Icon(Icons.sell_outlined),
               selectedIcon: Icon(Icons.sell_rounded),
-              label: 'Sales',
+              label: 'Collections',
             ),
             NavigationDestination(
               icon: Icon(Icons.account_balance_outlined),

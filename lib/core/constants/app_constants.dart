@@ -2,7 +2,7 @@ class AppConstants {
   AppConstants._();
 
   static const String appName = 'ExpenseTrack Pro';
-  static const String appVersion = '1.0.0';
+  static const String appVersion = '1.1.1+3';
 
   // ── Multi-business ──────────────────────────────────────────────────────────
   // Fixed UUID for the default (legacy) business created during Phase 0 backfill.
