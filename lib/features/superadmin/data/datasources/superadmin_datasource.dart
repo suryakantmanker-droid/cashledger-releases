@@ -88,8 +88,7 @@ class BusinessOverview {
     if (!isActive) return false;
     if (subscriptionStatus == SubscriptionStatus.inactive) return false;
     if (subscriptionStatus == SubscriptionStatus.expired) return false;
-    if (subscriptionExpiryDate != null &&
-        DateTime.now().isAfter(subscriptionExpiryDate!)) return false;
+    if (subscriptionExpiryDate != null && DateTime.now().isAfter(subscriptionExpiryDate!)) return false;
     return true;
   }
 }
@@ -337,11 +336,13 @@ class SuperadminDataSourceImpl implements SuperadminDataSource {
 
       final businessId = bizRow['id'] as String;
 
-      // 4. Add admin as owner of this business
+      // 4. Add admin as owner of this business — must be the real 'owner'
+      //    role (not 'admin') so the owner-protection checks in
+      //    removeAdmin/revertToPreviousRole actually apply to them.
       await _supabase.from(SupabaseTables.businessMembers).upsert({
         'business_id': businessId,
         'user_uid':    adminUid,
-        'role':        AppConstants.roleAdmin,
+        'role':        AppConstants.roleOwner,
         'is_active':   true,
         'invited_by':  createdBy,
         'joined_at':   now,
@@ -470,10 +471,30 @@ class SuperadminDataSourceImpl implements SuperadminDataSource {
               .from(SupabaseTables.users)
               .update(userUpdate)
               .eq('uid', ownerUid);
+
+          // Email also lives in Supabase Auth — without this, the owner's
+          // login email stays the old one and they get locked out.
+          if (ownerEmail != null && ownerEmail.isNotEmpty) {
+            await _updateAuthEmail(uid: ownerUid, newEmail: ownerEmail);
+          }
         }
       }
     } on PostgrestException catch (e) {
       throw ServerException('Failed to update business: ${e.message}');
+    }
+  }
+
+  /// Calls the `update-user-email` Edge Function (service_role key) to keep
+  /// the Supabase Auth login email in sync with the `users` row.
+  Future<void> _updateAuthEmail({required String uid, required String newEmail}) async {
+    final response = await _supabase.functions.invoke(
+      'update-user-email',
+      body: {'uid': uid, 'newEmail': newEmail},
+      headers: {'Content-Type': 'application/json'},
+    );
+    if (response.status != 200) {
+      final error = (response.data as Map?)?['error'] as String?;
+      throw ServerException(error ?? 'Failed to update login email');
     }
   }
 

@@ -2,13 +2,16 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/constants/permission_matrix.dart';
 import '../../../../core/constants/route_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_utils.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/empty_state.dart';
+import '../../../../shared/providers/business_context_provider.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
 import '../../../expenses/presentation/widgets/expense_list_tile.dart';
+import '../../../sites/presentation/providers/site_provider.dart';
 import '../providers/employee_provider.dart';
 
 class EmployeeDetailScreen extends ConsumerWidget {
@@ -19,11 +22,37 @@ class EmployeeDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final employeeAsync = ref.watch(employeeByIdProvider(employeeId));
     final expensesAsync = ref.watch(employeeExpensesStreamProvider(employeeId));
+    final canManageRoles = ref.watch(currentUserRoleProvider).canManageRoles;
+    final currentSiteAsync = ref.watch(currentSiteAssignmentProvider(employeeId));
+    final siteHistoryAsync = ref.watch(siteAssignmentHistoryProvider(employeeId));
+
+    ref.listen<EmployeeState>(employeeNotifierProvider, (_, next) {
+      if (next.successMessage != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(next.successMessage!),
+          backgroundColor: AppColors.success,
+        ));
+        ref.read(employeeNotifierProvider.notifier).clearMessages();
+      }
+      if (next.errorMessage != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(next.errorMessage!),
+          backgroundColor: AppColors.error,
+        ));
+        ref.read(employeeNotifierProvider.notifier).clearMessages();
+      }
+    });
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Employee Detail'),
         actions: [
+          if (canManageRoles)
+            IconButton(
+              icon: const Icon(Icons.manage_accounts_rounded),
+              tooltip: 'Change Role',
+              onPressed: () => _showChangeRoleDialog(context, ref, employeeId),
+            ),
           IconButton(
             icon: const Icon(Icons.lock_reset_rounded),
             tooltip: 'Reset Password',
@@ -212,7 +241,66 @@ class EmployeeDetailScreen extends ConsumerWidget {
                         .where((s) => s?.isNotEmpty == true)
                         .join(', '),
                   ),
+                if (currentSiteAsync.valueOrNull != null)
+                  _InfoItem(
+                    Icons.location_on_outlined,
+                    'Current Site',
+                    currentSiteAsync.value!.siteAddress.isNotEmpty
+                        ? '${currentSiteAsync.value!.siteName} (${currentSiteAsync.value!.siteAddress})'
+                        : currentSiteAsync.value!.siteName,
+                  ),
               ],
+            ),
+            SizedBox(height: 16.h),
+
+            // Site History
+            Text(
+              'Site History',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 15.sp,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            SizedBox(height: 8.h),
+            siteHistoryAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Text('Error: $e'),
+              data: (history) {
+                if (history.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(child: Text('No site assigned yet')),
+                  );
+                }
+                return Column(
+                  children: history
+                      .map((a) => Padding(
+                            padding: EdgeInsets.only(bottom: 8.h),
+                            child: ListTile(
+                              tileColor: Theme.of(context)
+                                  .colorScheme
+                                  .surfaceContainerHighest
+                                  .withValues(alpha: 0.3),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                              leading: Icon(
+                                a.isCurrent
+                                    ? Icons.location_on_rounded
+                                    : Icons.location_on_outlined,
+                                color: a.isCurrent ? AppColors.primary : Colors.grey,
+                              ),
+                              title: Text(a.siteName,
+                                  style: const TextStyle(fontWeight: FontWeight.w600)),
+                              subtitle: Text(
+                                '${AppUtils.formatDate(a.startDate)} — '
+                                '${a.isCurrent ? 'Present' : AppUtils.formatDate(a.endDate!)}',
+                              ),
+                            ),
+                          ))
+                      .toList(),
+                );
+              },
             ),
             SizedBox(height: 16.h),
 
@@ -337,6 +425,87 @@ Future<void> _showResetPasswordDialog(
     newPassCtrl.dispose();
     confirmPassCtrl.dispose();
   });
+}
+
+Future<void> _showChangeRoleDialog(
+    BuildContext context, WidgetRef ref, String employeeId) {
+  return showDialog<void>(
+    context: context,
+    builder: (_) => _ChangeRoleDialog(employeeId: employeeId),
+  );
+}
+
+class _ChangeRoleDialog extends ConsumerStatefulWidget {
+  final String employeeId;
+  const _ChangeRoleDialog({required this.employeeId});
+
+  @override
+  ConsumerState<_ChangeRoleDialog> createState() => _ChangeRoleDialogState();
+}
+
+class _ChangeRoleDialogState extends ConsumerState<_ChangeRoleDialog> {
+  UserRole? _selected;
+
+  static const _options = [
+    UserRole.employee,
+    UserRole.accountant,
+    UserRole.manager,
+    UserRole.admin,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final roleAsync = ref.watch(employeeCurrentRoleProvider(widget.employeeId));
+    final employeeState = ref.watch(employeeNotifierProvider);
+
+    return AlertDialog(
+      title: const Text('Change Role'),
+      content: roleAsync.when(
+        loading: () => const SizedBox(
+          height: 60,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+        error: (e, _) => Text('Failed to load current role: $e'),
+        data: (currentRole) {
+          _selected ??= currentRole ?? UserRole.employee;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Current role: ${(currentRole ?? UserRole.employee).displayName}'),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<UserRole>(
+                initialValue: _selected,
+                decoration: const InputDecoration(border: OutlineInputBorder()),
+                items: _options
+                    .map((r) => DropdownMenuItem(value: r, child: Text(r.displayName)))
+                    .toList(),
+                onChanged: (v) => setState(() => _selected = v),
+              ),
+            ],
+          );
+        },
+      ),
+      actions: [
+        TextButton(
+          onPressed: employeeState.isLoading ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: employeeState.isLoading || _selected == null
+              ? null
+              : () async {
+                  final newRole = _selected!;
+                  Navigator.pop(context);
+                  await ref
+                      .read(employeeNotifierProvider.notifier)
+                      .changeRole(widget.employeeId, newRole);
+                },
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
 }
 
 class _StatChip extends StatelessWidget {

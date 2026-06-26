@@ -105,4 +105,89 @@ class BusinessRepositoryImpl implements BusinessRepository {
       return Left(ServerFailure(e.message));
     }
   }
+
+  @override
+  Future<Either<Failure, List<BusinessMemberInfo>>> getBusinessAdmins(
+      String businessId) async {
+    try {
+      final admins = await _dataSource.getBusinessAdmins(businessId);
+      return Right(admins);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    }
+  }
+
+  @override
+  Future<Either<Failure, BusinessMemberInfo>> inviteAdmin({
+    required String businessId,
+    required String name,
+    required String email,
+    required String password,
+    required String invitedBy,
+  }) async {
+    try {
+      final admin = await _dataSource.inviteAdmin(
+        businessId: businessId,
+        name:       name,
+        email:      email,
+        password:   password,
+        invitedBy:  invitedBy,
+      );
+      return Right(admin);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> removeAdmin({
+    required String businessId,
+    required String userUid,
+  }) async {
+    try {
+      await _dataSource.removeAdmin(businessId: businessId, userUid: userUid);
+      return const Right(null);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> revertToPreviousRole({
+    required String businessId,
+    required String userUid,
+  }) async {
+    try {
+      await _dataSource.revertToPreviousRole(businessId: businessId, userUid: userUid);
+      return const Right(null);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    }
+  }
+
+  @override
+  Future<Either<Failure, ExistingUserMatch?>> findUserByEmail({
+    required String businessId,
+    required String email,
+  }) async {
+    try {
+      final match = await _dataSource.findUserByEmail(businessId: businessId, email: email);
+      return Right(match);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> deactivateEmployeeRecordIfAny({
+    required String businessId,
+    required String userUid,
+  }) async {
+    try {
+      await _dataSource.deactivateEmployeeRecordIfAny(businessId: businessId, userUid: userUid);
+      return const Right(null);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    }
+  }
 }

@@ -148,7 +148,7 @@ class _CreateBusinessScreenState
               const SizedBox(height: 16),
 
               DropdownButtonFormField<String>(
-                value: _selectedPlan,
+                initialValue: _selectedPlan,
                 decoration: const InputDecoration(
                   labelText: 'Plan',
                   prefixIcon: Icon(Icons.workspace_premium_outlined),
@@ -285,7 +285,7 @@ class _CreateBusinessScreenState
               Text(
                 _useCustomDays
                     ? 'Custom demo period — enter the number of days above.'
-                    : 'Demo expires ${_demoDays} days after creation.',
+                    : 'Demo expires $_demoDays days after creation.',
                 style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
               ),
 

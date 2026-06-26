@@ -2,12 +2,16 @@ class AppConstants {
   AppConstants._();
 
   static const String appName = 'ExpenseTrack Pro';
-  static const String appVersion = '1.1.1+3';
+  static const String appVersion = '1.1.2+4';
 
   // ── Multi-business ──────────────────────────────────────────────────────────
   // Fixed UUID for the default (legacy) business created during Phase 0 backfill.
   // All data that existed before multi-business migration lives under this ID.
   static const String defaultBusinessId = '11111111-1111-1111-1111-111111111111';
+
+  // Hard cap on admin-like members (owner + admin roles) per business.
+  // Superadmins are excluded from this count (support access, not a real admin seat).
+  static const int maxBusinessAdmins = 5;
 
   // ── Supabase table names ────────────────────────────────────────────────────
   // Use SupabaseTables constants (below) instead of these for new code.

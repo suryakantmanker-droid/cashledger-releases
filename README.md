@@ -1,25 +1,28 @@
-# ExpenseTrack Pro
+# ExpenseTrack Pro (CashLedger)
 
-A professional **Expense & Employee Money Tracking System** built with Flutter and Firebase. Supports dual roles — Admin and Employee — with real-time dashboards, expense approval workflows, fund transfers, and a double-entry ledger.
+A professional **multi-business Expense & Employee Money Tracking System** built with Flutter and Supabase. Supports a six-level role hierarchy (owner/admin/manager/accountant/employee/viewer) across multiple businesses, with real-time dashboards, expense approval workflows, fund transfers, employee-site assignment tracking, and a double-entry ledger.
 
 ## Features
 
-- **Admin**
-  - Manage employees (CRUD)
-  - Transfer funds to employees
-  - Approve or reject expense submissions
-  - View real-time ledger and financial reports
-  - Generate PDF reports with charts
+- **Superadmin**
+  - Create and manage businesses, set demo/subscription status
+  - Watch specific businesses, reset admin passwords
+
+- **Business Owner / Admin**
+  - Manage employees (CRUD), assign departments and physical sites
+  - Add/remove additional business admins, change member roles
+  - Transfer funds to employees; approve or reject expense submissions
+  - View real-time ledger and financial reports; generate PDF reports with charts
 
 - **Employee**
   - Submit expenses with bill photo/file attachments
   - Track personal ledger and fund balance
-  - Receive push notifications on approval status
+  - Receive push notifications on approval status and site reassignment
 
 - **Shared**
   - Role-based navigation (GoRouter with auth redirect)
-  - Real-time data via Firestore streams
-  - Push notifications via FCM
+  - Real-time data via Supabase Realtime streams
+  - Push notifications via FCM (delivered through a Supabase Edge Function)
   - Light/dark theme support
 
 ## Tech Stack
@@ -27,11 +30,11 @@ A professional **Expense & Employee Money Tracking System** built with Flutter a
 | Layer | Technology |
 |---|---|
 | UI | Flutter 3.2+ |
-| State management | Riverpod v3 |
-| Navigation | GoRouter v17 |
-| Auth | Firebase Auth |
-| Database | Cloud Firestore + Supabase |
-| Push notifications | Firebase Messaging (FCM) |
+| State management | Riverpod v3 (hand-written providers, no codegen) |
+| Navigation | GoRouter |
+| Auth + Database | Supabase (Postgres, Auth, RLS, RPC functions, Edge Functions) |
+| Push notifications | Firebase Messaging (FCM) — messaging only, no Firestore |
+| File storage | Cloudinary |
 | Local storage | Hive + SharedPreferences |
 | Charts | fl_chart, Syncfusion Flutter Charts |
 | PDF | pdf + printing |
@@ -42,8 +45,8 @@ A professional **Expense & Employee Money Tracking System** built with Flutter a
 ### Prerequisites
 
 - Flutter SDK `>=3.2.0 <4.0.0`
-- Firebase CLI (`npm install -g firebase-tools`)
-- An active Firebase project (default: `cashledger-9e954`)
+- Supabase CLI (for migrations/Edge Functions): `npm install -g supabase`
+- Firebase CLI (messaging config only): `npm install -g firebase-tools`
 
 ### Setup
 
@@ -51,56 +54,73 @@ A professional **Expense & Employee Money Tracking System** built with Flutter a
 # Install dependencies
 flutter pub get
 
-# Run code generation (Riverpod + Hive adapters)
-dart run build_runner build --delete-conflicting-outputs
-
 # Run the app
 flutter run
 ```
 
-### Firebase
+### Supabase
 
-Firebase options are pre-configured in `firebase_options.dart`. To regenerate after changing Firebase config:
+The Supabase URL/anon key are set directly in `lib/main.dart`. Migrations live in `supabase/migrations/*.sql` but are **not** tracked via `supabase db push` — apply a specific file against the linked project with:
+
+```bash
+supabase link --project-ref <project-ref>   # one-time per machine
+supabase db query --file supabase/migrations/0NN_name.sql --linked
+```
+
+Edge Functions (`supabase/functions/*/index.ts`) handle service-role-only operations (creating other users' Auth accounts, admin-triggered email/password changes, sending FCM pushes):
+
+```bash
+supabase functions deploy <name>
+```
+
+### Firebase (messaging only)
+
+Firebase options are pre-configured in `firebase_options.dart` — used solely for FCM push delivery. Regenerate after changing Firebase config:
 
 ```bash
 flutterfire configure
-```
-
-Deploy Firestore rules, indexes, and Cloud Functions:
-
-```bash
-firebase deploy --only firestore:rules
-firebase deploy --only firestore:indexes
-firebase deploy --only functions
 ```
 
 ## Project Structure
 
 ```
 lib/
-├── main.dart              # Entry point — Firebase, Supabase, Hive init
+├── main.dart              # Entry point — Firebase Messaging, Supabase, Hive init
 ├── app.dart               # MaterialApp, GoRouter, theme
 ├── core/                  # Shared infrastructure (theme, router, services, widgets)
+├── shared/providers/      # business_context_provider.dart — the multi-business spine
 └── features/              # Feature modules
     ├── auth/
+    ├── business/           # Multi-business membership & admin management
+    ├── superadmin/
     ├── dashboard/
     ├── employees/
+    ├── sites/              # Multi-location assignment + history
+    ├── departments/
     ├── expenses/
+    ├── sales/
     ├── funds/
     ├── ledger/
     ├── approval/
     ├── notifications/
-    └── reports/
+    ├── reports/
+    └── profile/
 ```
 
-## User Roles
+## Roles
 
-| Role | Default Route | Capabilities |
+Six-level hierarchy (`lib/core/constants/permission_matrix.dart`), scoped **per business** — a user's role can differ across businesses they belong to:
+
+| Role | Level | Notes |
 |---|---|---|
-| `admin` | `/admin/dashboard` | Full access |
-| `employee` | `/employee/dashboard` | Own expenses & ledger only |
+| `owner` | 50 | The business's real creator; protected from removal |
+| `admin` | 40 | Full business management |
+| `manager` | 30 | Fund transfers, salary/attendance |
+| `accountant` | 20 | Approve expenses, view reports |
+| `employee` | 10 | Submit expenses, view own ledger |
+| `viewer` | 0 | Read-only |
 
-Role is stored in the `users` Firestore collection and determines the navigation shell on login.
+`AdminShell` (`/admin/...`) is shown for admin+ roles, `EmployeeShell` (`/employee/...`) for everyone else. Role is stored per-business in the `business_members` table (Supabase), not as a single global flag.
 
 ## Running Tests
 
@@ -113,5 +133,3 @@ flutter test
 ```bash
 flutter analyze
 ```
-=======
-# cashledger-releases

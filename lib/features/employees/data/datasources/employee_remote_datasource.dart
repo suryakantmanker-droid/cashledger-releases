@@ -238,8 +238,29 @@ class EmployeeRemoteDataSourceImpl implements EmployeeRemoteDataSource {
       if (usersUpdate.isNotEmpty) {
         await _supabase.from('users').update(usersUpdate).eq('uid', id);
       }
+
+      // Email also lives in Supabase Auth — without this, the employee's
+      // login email stays the old one and they get locked out.
+      if (data.containsKey('email')) {
+        await _updateAuthEmail(uid: id, newEmail: data['email'] as String);
+      }
     } on PostgrestException catch (e) {
       throw FirestoreException(e.message, code: e.code);
+    }
+  }
+
+  /// Calls the `update-user-email` Edge Function (service_role key) to keep
+  /// the Supabase Auth login email in sync with the `users`/`employees` row.
+  Future<void> _updateAuthEmail({required String uid, required String newEmail}) async {
+    final response = await _supabase.functions.invoke(
+      'update-user-email',
+      body: {'uid': uid, 'newEmail': newEmail},
+      headers: {'Content-Type': 'application/json'},
+    );
+    if (response.status != 200) {
+      final d = response.data;
+      final error = (d is Map ? d['error'] : null)?.toString();
+      throw FirestoreException(error ?? 'Failed to update login email');
     }
   }
 

@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_text_field.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../business/presentation/widgets/business_admins_panel.dart';
 import '../../data/datasources/superadmin_datasource.dart';
 import '../providers/superadmin_provider.dart';
 
@@ -138,7 +140,7 @@ class _EditBusinessScreenState extends ConsumerState<EditBusinessScreen> {
               _DropdownLabel('Plan'),
               SizedBox(height: 6.h),
               DropdownButtonFormField<String>(
-                value: _selectedPlan,
+                initialValue: _selectedPlan,
                 decoration: const InputDecoration(
                   prefixIcon: Icon(Icons.workspace_premium_outlined),
                 ),
@@ -254,7 +256,7 @@ class _EditBusinessScreenState extends ConsumerState<EditBusinessScreen> {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'Email change updates app records only, not login credentials.',
+                        'Changing the email also updates the login — the owner must use the new email next time they sign in.',
                         style: TextStyle(fontSize: 11.sp, color: Colors.orange.shade700),
                       ),
                     ),
@@ -262,6 +264,13 @@ class _EditBusinessScreenState extends ConsumerState<EditBusinessScreen> {
                 ),
                 SizedBox(height: 24.h),
               ],
+
+              BusinessAdminsPanel(
+                businessId: widget.business.id,
+                currentUserUid: ref.watch(currentUserProvider).valueOrNull?.uid ?? '',
+                invitedBy: ref.watch(currentUserProvider).valueOrNull?.uid ?? '',
+              ),
+              SizedBox(height: 24.h),
 
               AppButton(
                 label: 'Save Changes',

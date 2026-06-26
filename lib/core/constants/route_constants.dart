@@ -20,6 +20,7 @@ class RouteConstants {
   static const String adminReports = '/admin/reports';
   static const String adminNotifications = '/admin/notifications';
   static const String adminProfile = '/admin/profile';
+  static const String adminBusinessAdmins = '/admin/business-admins';
 
   // Employee Routes
   static const String employeeDashboard = '/employee/dashboard';

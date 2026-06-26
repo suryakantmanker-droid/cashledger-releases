@@ -4,10 +4,10 @@ import '../../../../core/constants/permission_matrix.dart';
 // ── Subscription status ───────────────────────────────────────────────────────
 
 enum SubscriptionStatus {
-  active,    // Paid, full access
-  demo,      // Time-limited trial
-  expired,   // Trial or subscription ended
-  inactive;  // Manually deactivated by superadmin
+  active, // Paid, full access
+  demo, // Time-limited trial
+  expired, // Trial or subscription ended
+  inactive; // Manually deactivated by superadmin
 
   static SubscriptionStatus fromString(String? value) =>
       SubscriptionStatus.values.firstWhere(
@@ -52,8 +52,7 @@ class BusinessMembershipEntity extends Equatable {
   bool get isSubscriptionValid {
     if (subscriptionStatus == SubscriptionStatus.inactive) return false;
     if (subscriptionStatus == SubscriptionStatus.expired) return false;
-    if (subscriptionExpiryDate != null &&
-        DateTime.now().isAfter(subscriptionExpiryDate!)) return false;
+    if (subscriptionExpiryDate != null && DateTime.now().isAfter(subscriptionExpiryDate!)) return false;
     return true;
   }
 
@@ -69,13 +68,20 @@ class BusinessMembershipEntity extends Equatable {
 
   String get roleName => role.displayName;
 
-  bool get canApproveExpenses  => role.canApproveExpenses;
-  bool get canTransferFunds    => role.canTransferFunds;
-  bool get canManageEmployees  => role.canManageEmployees;
-  bool get canViewReports      => role.canViewReports;
-  bool get isAdminLike         => role.isAdminLike;
+  bool get canApproveExpenses => role.canApproveExpenses;
+  bool get canTransferFunds => role.canTransferFunds;
+  bool get canManageEmployees => role.canManageEmployees;
+  bool get canViewReports => role.canViewReports;
+  bool get isAdminLike => role.isAdminLike;
 
   @override
-  List<Object?> get props =>
-      [id, businessId, userUid, role, isActive, subscriptionStatus, subscriptionExpiryDate];
+  List<Object?> get props => [
+        id,
+        businessId,
+        userUid,
+        role,
+        isActive,
+        subscriptionStatus,
+        subscriptionExpiryDate
+      ];
 }

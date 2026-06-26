@@ -14,9 +14,9 @@ int _toInt(dynamic v) {
 }
 
 class AdminDashboardStats {
-  final double totalAssigned;   // Phase 3: populated from funds migration
+  final double totalAssigned;   // SUM(employees.total_assigned), active employees
   final double totalSpent;
-  final double totalBalance;    // Phase 3: totalAssigned - totalSpent
+  final double totalBalance;    // SUM(employees.balance), active employees
   final int totalEmployees;
   final int activeEmployees;
   final int pendingApprovals;
@@ -57,6 +57,8 @@ class AdminDashboardStats {
   ) {
     final totalEmployees = _toInt(rpc['total_employees']);
     final totalSpent = _toDouble(rpc['total_approved_amount']);
+    final totalAssigned = _toDouble(rpc['total_assigned']);
+    final totalBalance = _toDouble(rpc['net_balance']);
     final pendingApprovals = _toInt(rpc['pending_approvals']);
 
     final recentExpenses = recentRows
@@ -68,9 +70,9 @@ class AdminDashboardStats {
         .length;
 
     return AdminDashboardStats(
-      totalAssigned: 0.0,   // Phase 3: funds not yet migrated
+      totalAssigned: totalAssigned,
       totalSpent: totalSpent,
-      totalBalance: 0.0,    // Phase 3
+      totalBalance: totalBalance,
       totalEmployees: totalEmployees,
       activeEmployees: totalEmployees, // Phase 3: distinguish active count
       pendingApprovals: pendingApprovals,

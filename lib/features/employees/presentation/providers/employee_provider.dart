@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/constants/permission_matrix.dart';
 import '../../../../core/errors/exceptions.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../../../shared/providers/business_context_provider.dart';
+import '../../../business/presentation/providers/business_admins_provider.dart';
 import '../../data/datasources/employee_remote_datasource.dart';
 import '../../data/models/employee_model.dart';
 
@@ -38,6 +40,19 @@ final employeeByIdProvider =
   if (businessId == null) return Stream.error(const FirestoreException('No active business'));
   return ref.read(employeeRemoteDataSourceProvider)
       .watchEmployeeById(id, businessId: businessId);
+});
+
+/// The employee's current role in the active business (business_members.role),
+/// independent of their `employees` table record — used by the "Change Role" UI.
+final employeeCurrentRoleProvider =
+    FutureProvider.autoDispose.family<UserRole?, String>((ref, userUid) async {
+  final businessId = ref.watch(activeBusinessIdProvider);
+  if (businessId == null) return null;
+  final result = await ref.watch(businessRepositoryProvider).getMembershipsForUser(userUid);
+  return result.fold(
+    (_) => null,
+    (memberships) => memberships.where((m) => m.businessId == businessId).firstOrNull?.role,
+  );
 });
 
 // ── State Notifier ─────────────────────────────────────────────────────────
@@ -158,6 +173,42 @@ class EmployeeNotifier extends StateNotifier<EmployeeState> {
         successMessage: isActive ? 'Employee activated.' : 'Employee deactivated.',
       );
       return true;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, errorMessage: e.toString());
+      return false;
+    }
+  }
+
+  Future<bool> changeRole(String userUid, UserRole newRole) async {
+    final businessId = _businessId;
+    if (businessId == null) {
+      state = state.copyWith(isLoading: false, errorMessage: _bizNotLoaded);
+      return false;
+    }
+    state = state.copyWith(isLoading: true, errorMessage: null);
+    try {
+      // updateMemberRole already handles the employees-record
+      // deactivation/reactivation and previous_role bookkeeping centrally.
+      final result = await _ref.read(businessRepositoryProvider).updateMemberRole(
+        businessId: businessId,
+        userUid:    userUid,
+        newRole:    newRole.name,
+      );
+      return result.fold(
+        (failure) {
+          state = state.copyWith(isLoading: false, errorMessage: failure.message);
+          return false;
+        },
+        (_) {
+          _ref.invalidate(employeeCurrentRoleProvider(userUid));
+          _ref.invalidate(businessAdminsProvider(businessId));
+          state = state.copyWith(
+            isLoading: false,
+            successMessage: 'Role changed to ${newRole.displayName}.',
+          );
+          return true;
+        },
+      );
     } catch (e) {
       state = state.copyWith(isLoading: false, errorMessage: e.toString());
       return false;

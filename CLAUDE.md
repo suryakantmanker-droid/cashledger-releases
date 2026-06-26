@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**expense_tracker** — A Flutter expense & employee money tracking app with admin/employee dual-role system, Firebase backend, and real-time Firestore data. Firebase project: `cashledger-9e954`.
+**expense_tracker** (CashLedger) — A Flutter expense & employee money tracking app with a multi-tenant, multi-business architecture: **superadmin / business-owner / admin / manager / accountant / employee** role hierarchy, real-time Supabase Postgres data, and FCM push notifications.
+
+**Backend reality (important — differs from what package names alone would suggest):**
+- **Supabase** is the primary backend: Postgres database, Auth, Row-Level Security, Postgres RPC functions, Edge Functions, and Realtime streams. Project ref `lfvmkuqesvjodqrzzpaj` (URL/anon key in `lib/main.dart`).
+- **Firebase** is used *only* for push notification delivery (`firebase_messaging`) plus a legacy `firebase_options.dart`/`functions/` Cloud Functions setup. There is **no Cloud Firestore usage anywhere in `lib/`** — `functions/index.js` (`sendPushOnNotification`, Firestore-triggered) and `firestore.rules`/`firestore.indexes.json` are leftovers from an earlier architecture and aren't invoked by current code. The live notification path is: `NotificationService.sendNotificationToUser()` → inserts into the Supabase `notifications` table → invokes the `send-notification` Supabase Edge Function → FCM push (token stored in `users.fcm_token`).
 
 ## Commands
 
@@ -20,99 +24,88 @@ flutter build ios
 flutter test
 flutter test test/widget_test.dart   # single test file
 
-# Code generation (required after editing Riverpod @riverpod annotations or Hive models)
-dart run build_runner build --delete-conflicting-outputs
-dart run build_runner watch          # watch mode during development
-
 # Linting
 flutter analyze
 
-# Firebase deployment
-firebase deploy --only firestore:rules
-firebase deploy --only firestore:indexes
-firebase deploy --only functions
+# Code generation — NOT currently needed: there are no @riverpod or @HiveType
+# annotations anywhere in lib/ despite riverpod_generator/hive_generator being
+# dev dependencies. All providers are hand-written StateNotifier/FutureProvider;
+# Hive is used for plain key-value storage. Only run this if you add a new
+# @riverpod/@HiveType annotation:
+dart run build_runner build --delete-conflicting-outputs
 
-# Regenerate Firebase options (after changing Firebase config)
+# Regenerate Firebase options (after changing Firebase messaging config)
 flutterfire configure
 ```
 
+### Supabase — migrations & functions
+
+Migrations in `supabase/migrations/*.sql` are **numbered but not tracked via `supabase db push`/migration history** — this project applies them manually (see migration file headers: "Run this in: Supabase Dashboard → SQL Editor"). The CLI pattern used throughout this repo's history:
+
+```bash
+supabase link --project-ref lfvmkuqesvjodqrzzpaj   # one-time per machine
+supabase db query --file supabase/migrations/0NN_name.sql --linked
+supabase db query "SELECT ..." --linked            # ad-hoc checks/backfills
+```
+
+Do **not** run `supabase db push` blind — since remote migration history isn't tracked, it may try to replay the entire migration directory against production. Verify schema state with a targeted `supabase db query` first, and confirm with the user before applying anything to the live DB.
+
+Edge Functions (`supabase/functions/*/index.ts`, Deno) run with the `service_role` key server-side for operations the client's own JWT can't perform (creating *other* users' Auth accounts, changing another user's email/password, bypassing RLS):
+- `create-auth-user` — creates a Supabase Auth account + `users` row (employee-add and admin-invite flows)
+- `update-user-email` / `update-user-password` — admin-triggered credential changes for other users
+- `send-notification` — sends the actual FCM push for a `notifications` row
+
+Deploy with `supabase functions deploy <name>` (requires `supabase link` first); also confirm with the user first, since this pushes to the live project.
+
 ## Architecture
 
-**Clean Architecture** with feature-based organization:
+**Clean Architecture**, feature-based. Each feature under `lib/features/<name>/` typically has `data/{datasources,models,repositories}`, `domain/{entities,repositories}`, `presentation/{screens,providers,widgets}`. Repositories return `dartz` `Either<Failure, T>`; datasources throw `ServerException`/`FirestoreException` (legacy exception name — not Firestore-specific) caught and converted at the repository layer.
 
-```
-lib/
-├── main.dart              # Firebase + Supabase + Hive init, background FCM handler
-├── app.dart               # MaterialApp, GoRouter, theme, ProviderScope
-├── core/                  # Shared infrastructure
-│   ├── constants/         # App-wide constants and route path strings
-│   ├── errors/            # Failure types (dartz Either) and custom exceptions
-│   ├── theme/             # Light/dark themes, colors, typography
-│   ├── utils/             # Formatting helpers, validators
-│   ├── services/          # Firebase, Supabase, notifications, storage service classes
-│   ├── router/            # GoRouter with auth-based redirect logic
-│   └── widgets/           # Reusable AppButton, AppTextField, loading overlays, etc.
-└── features/              # Domain-based feature modules
-    ├── auth/              # Login, signup, forgot password, auth provider, UserEntity
-    ├── dashboard/         # Admin & employee dashboards with stats and charts
-    ├── employees/         # Employee CRUD (admin only)
-    ├── expenses/          # Expense submission, list, detail, approval
-    ├── funds/             # Fund transfer and history (admin)
-    ├── ledger/            # Double-entry ledger, immutable entries
-    ├── approval/          # Expense approval workflow screen
-    ├── notifications/     # Notification list and models
-    └── reports/           # Analytics and PDF report generation
-```
+Feature modules: `auth`, `business` (multi-business membership/admin management), `superadmin`, `dashboard`, `employees`, `sites` (multi-location assignment + history), `departments`, `expenses`, `sales`, `funds`, `ledger`, `approval`, `notifications`, `reports`, `profile`.
 
-Each feature typically contains: screen(s), a Riverpod provider, and models.
+### Multi-business architecture — the spine
 
-## State Management
+Every business-scoped repository/provider/screen reads from `lib/shared/providers/business_context_provider.dart` and **never** receives a `businessId` through the widget tree:
 
-**Riverpod v3 (dev)** with code generation:
+- `businessContextProvider` (`StateNotifierProvider`, global/keepAlive) — holds the user's loaded `BusinessMembershipEntity` list and the currently active one. Bootstrap sequence and business-switch behavior are documented in the file's header comment.
+- `activeBusinessIdProvider` — the active business's UUID; repositories must only be called once this is non-null.
+- `currentUserRoleProvider` — the caller's `UserRole` *in the active business* (not a global role).
+- `userMembershipsProvider` — all businesses the user belongs to (business switcher).
+- Superadmins get a synthetic `UserRole.owner` membership per business (`getAllBusinessesAsSuperadmin`) rather than a real `business_members` row, unless `ensureSuperadminMembership()` has granted them a real one for direct support access — that grant does **not** count toward `AppConstants.maxBusinessAdmins` and is filtered out of `getBusinessAdmins()`.
 
-- `@riverpod` annotation → run `build_runner` to generate `.g.dart` files
-- `StreamProvider` for real-time Firestore streams (employees, expenses, ledger)
-- `StateNotifierProvider` for mutable state (auth, form submissions)
-- `FutureProvider.family` for single-document fetches
-- `ref.watch` in widget `build`, `ref.read` in callbacks/event handlers
+### Role hierarchy (`lib/core/constants/permission_matrix.dart`)
+
+Six-level hierarchy, **not** a flat admin/employee flag: `owner(50) > admin(40) > manager(30) > accountant(20) > employee(10) > viewer(0)`. All permission checks go through `UserRole.isAtLeast()` or the `UserRolePermissions` extension getters (`canApproveExpenses`, `canManageEmployees`, `canManageRoles`, `canManageBusiness` [owner-only], etc.) — never compare role strings directly.
+
+**Legacy field gotcha:** `users.role` (a string column, `AppConstants.roleAdmin`/`roleEmployee`) is a *separate*, older two-tier flag still read in several screens via `UserEntity.isAdmin`/`isEmployee` (splash/login post-auth routing, ledger scope, profile, expense-detail admin actions). It's kept in sync automatically by `BusinessRemoteDataSourceImpl._syncLegacyUserRole()` whenever `business_members.role` changes (`addMember`/`updateMemberRole`) — owner/admin collapse to legacy `'admin'`, everything else collapses to `'employee'`. If you add a new place that mutates a business role, route it through `BusinessRepository.addMember`/`updateMemberRole` rather than writing `business_members` directly, so this stays in sync.
+
+A business's true creator/owner **must** get `business_members.role = 'owner'`, not `'admin'` — only `'owner'` is protected from removal in `removeAdmin`/`revertToPreviousRole`. `superadmin_datasource.dart#createBusiness()` is the only place that should mint an owner row.
+
+### Role-change side effects are centralized
+
+`BusinessRemoteDataSourceImpl.updateMemberRole()` is the single place that: updates `business_members.role`, tracks `previous_role` (for the "revert to previous role" UI), syncs the legacy `users.role`, and activates/deactivates the matching `employees` row when crossing the admin-like boundary. Don't duplicate this logic in callers (`EmployeeNotifier.changeRole`, `BusinessAdminsActionsNotifier.switchToAdmin`) — they just call `updateMemberRole` and react to the result.
 
 ## Navigation
 
-**GoRouter v17** configured in `core/router/app_router.dart`:
+**GoRouter**, configured in `lib/core/router/app_router.dart`, with three persistent shells gated by role:
+- `AdminShell` (`/admin/...`) — `currentUserRoleProvider.isAdminLike` (admin+)
+- `EmployeeShell` (`/employee/...`) — everyone else
+- Superadmin routes (`/superadmin/...`) — `user.isSuperadmin`
 
-- `/` → SplashScreen (2 sec) → redirects based on auth state
-- `/login`, `/forgot-password` → unauthenticated routes
-- `AdminShell` (`/admin/...`) — persistent shell for admin users
-- `EmployeeShell` (`/employee/...`) — persistent shell for employee users
-- Auth redirect: unauthenticated → `/login`; authenticated on `/login` → role-based dashboard
-- `_RouterRefreshNotifier` listens to both stream and notifier auth state to trigger re-evaluation
+The top-level `redirect` callback is the authoritative router for auth/business-loading state and for routing away from auth screens once business context settles — it correctly uses `currentUserRoleProvider`. Screens that navigate manually right after an auth event (`login_screen.dart`, `splash_screen.dart`) still use the **legacy** `user.isAdmin` flag for their one-shot post-auth redirect, which is why keeping that legacy field in sync (above) matters.
 
-Route path constants live in `core/constants/route_constants.dart`.
-
-## Data Layer
-
-**Two backends:**
-- **Firebase/Firestore** — auth (`firebase_auth`), real-time data, push notifications (FCM)
-- **Supabase** — PostgreSQL for supplementary data
-
-**Firestore collections:** `users`, `employees`, `funds`, `expenses`, `ledger`, `notifications`, `settings`, `user_tokens`
-
-**Error handling:** `dartz` `Either<Failure, T>` returned from repository methods. `Failure` subtypes defined in `core/errors/failures.dart`. Data sources throw custom exceptions (`core/errors/exceptions.dart`).
+`RouteConstants` (`lib/core/constants/route_constants.dart`) holds every route path string — add new routes there, not as raw string literals.
 
 ## Key Patterns
 
-- **Forms:** `reactive_forms` package with validators from `core/utils/validators.dart`; use `AppTextField` widget for consistent styling
-- **Images:** compressed via `flutter_image_compress` before upload; displayed with `cached_network_image` + shimmer placeholder
-- **PDF:** generated with `pdf` package, viewed with `flutter_pdfview`; download via `dio`
-- **Local storage:** `hive_flutter` for non-Firestore local state; `shared_preferences` for simple key-value
-- **Responsive layout:** `flutter_screenutil` for sizing — always initialize before use
+- **Dropdown-with-inline-create**: `DepartmentDropdown` (`lib/features/departments/`) and `SiteDropdown` (`lib/features/sites/`) both implement "pick from a business-scoped list, or type a new value to create it inline" via a bottom sheet. Follow this pattern for any future "managed list" field rather than a plain `DropdownButtonFormField`.
+- **Append-only history**: `employee_site_assignments` is intentionally not directly writable by the client (no INSERT/UPDATE RLS policy) — all writes go through the `fn_change_employee_site` Postgres RPC (`SECURITY DEFINER`, re-checks role server-side) so the close-old/open-new pair is atomic and the table stays a clean audit trail. Use this approach for any other "track changes over time" requirement instead of ad-hoc UPDATE-then-INSERT from Flutter.
+- **Forms:** `reactive_forms` package; `AppTextField`/`AppButton` (`lib/core/widgets/`) for consistent styling.
+- **Images:** compressed via `flutter_image_compress` before upload; uploaded to **Cloudinary** (unsigned preset, see `lib/core/services/storage_service.dart`) — not Firebase Storage or Supabase Storage; displayed with `cached_network_image`.
+- **PDF:** generated with `pdf` package, viewed with `flutter_pdfview`; download via `dio`.
+- **Local storage:** `hive_flutter` for local state (active business id, cached memberships, notification mode); `shared_preferences` for simple key-value.
+- **Responsive layout:** `flutter_screenutil` — already initialized in `app.dart`.
 
-## Firebase Cloud Functions
+## Error Handling
 
-`functions/index.js` (Node.js 20) — `sendPushOnNotification` triggers on new notification documents, reads FCM token from `user_tokens/{userId}`, and sends push with unread badge count.
-
-## Code Generation Files
-
-Files ending in `.g.dart` are auto-generated — never edit them manually. Re-run `build_runner` after modifying:
-- Any class annotated with `@riverpod`
-- Any Hive model annotated with `@HiveType`/`@HiveField`
+`dartz` `Either<Failure, T>` returned from repository methods. `Failure` subtypes in `lib/core/errors/failures.dart`. Data sources throw custom exceptions (`lib/core/errors/exceptions.dart`) caught and converted to `Failure`s at the repository layer.

@@ -33,6 +33,7 @@ import '../../features/ledger/presentation/screens/ledger_screen.dart';
 import '../../features/reports/presentation/screens/reports_screen.dart';
 import '../../features/approval/presentation/screens/approval_list_screen.dart';
 import '../../features/auth/presentation/screens/profile_screen.dart';
+import '../../features/business/presentation/screens/business_admins_screen.dart';
 import '../../features/notifications/presentation/screens/notification_screen.dart';
 import '../constants/permission_matrix.dart';
 import '../../shared/providers/business_context_provider.dart';
@@ -328,6 +329,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: RouteConstants.adminProfile,
             builder: (_, __) => const ProfileScreen(),
+          ),
+          GoRoute(
+            path: RouteConstants.adminBusinessAdmins,
+            builder: (_, __) => const BusinessAdminsScreen(),
           ),
         ],
       ),

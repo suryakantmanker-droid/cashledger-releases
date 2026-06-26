@@ -459,6 +459,12 @@ class _QuickActionsGrid extends ConsumerWidget {
         color: AppColors.purpleGradient[0],
         onTap: () => context.go(RouteConstants.adminReports),
       ),
+      _QAData(
+        icon: Icons.admin_panel_settings_outlined,
+        label: 'Admins',
+        color: AppColors.success,
+        onTap: () => context.push(RouteConstants.adminBusinessAdmins),
+      ),
     ];
 
     return Row(

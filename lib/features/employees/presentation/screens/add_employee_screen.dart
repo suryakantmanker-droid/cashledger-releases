@@ -11,6 +11,11 @@ import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../core/constants/permission_matrix.dart';
+import '../../../../shared/providers/business_context_provider.dart';
+import '../../../sites/data/models/site_model.dart';
+import '../../../sites/presentation/providers/site_provider.dart';
+import '../../../sites/presentation/widgets/site_dropdown.dart';
 import '../providers/employee_provider.dart';
 import '../../../departments/presentation/widgets/department_dropdown.dart';
 
@@ -36,8 +41,11 @@ class _AddEmployeeScreenState extends ConsumerState<AddEmployeeScreen> {
   final _stateCtrl    = TextEditingController();
   String? _selectedDepartment;
   String? _deptError;
+  SiteModel? _selectedSite;
+  String? _initialSiteId;
   bool _obscurePassword = true;
   bool _initialized = false;
+  bool _siteInitialized = false;
 
   File? _pickedImage;
   String? _existingImageUrl;
@@ -117,6 +125,30 @@ class _AddEmployeeScreenState extends ConsumerState<AddEmployeeScreen> {
           }
         });
       });
+
+      if (!_siteInitialized) {
+        ref.watch(currentSiteAssignmentProvider(widget.employeeId!)).whenData((assignment) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && !_siteInitialized) {
+              setState(() {
+                if (assignment != null) {
+                  _initialSiteId = assignment.siteId;
+                  _selectedSite = SiteModel(
+                    id: assignment.siteId,
+                    name: assignment.siteName,
+                    address: assignment.siteAddress,
+                    businessId: ref.read(activeBusinessIdProvider) ?? '',
+                    createdBy: '',
+                    isActive: true,
+                    createdAt: assignment.startDate,
+                  );
+                }
+                _siteInitialized = true;
+              });
+            }
+          });
+        });
+      }
     }
 
     // ── Success / Error listener ───────────────────────────────────────────
@@ -326,6 +358,30 @@ class _AddEmployeeScreenState extends ConsumerState<AddEmployeeScreen> {
               ),
               SizedBox(height: 20.h),
 
+              // Site Dropdown
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Site',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 13.sp,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSurface
+                          .withValues(alpha: 0.7),
+                    ),
+                  ),
+                  SizedBox(height: 6.h),
+                  SiteDropdown(
+                    value: _selectedSite,
+                    enabled: ref.watch(currentUserRoleProvider).canManageEmployees,
+                    onChanged: (v) => setState(() => _selectedSite = v),
+                  ),
+                ],
+              ),
+              SizedBox(height: 20.h),
+
               if (!widget.isEditing) ...[
                 _SectionLabel('Account Credentials'),
                 SizedBox(height: 12.h),
@@ -422,6 +478,20 @@ class _AddEmployeeScreenState extends ConsumerState<AddEmployeeScreen> {
       await ref
           .read(employeeNotifierProvider.notifier)
           .updateEmployee(widget.employeeId!, updateData);
+
+      // 3. Site change (notifies the employee) — only if it actually changed
+      if (_selectedSite != null && _selectedSite!.id != _initialSiteId) {
+        final businessId = ref.read(activeBusinessIdProvider);
+        if (businessId != null) {
+          await ref.read(siteAssignmentActionsProvider.notifier).changeSite(
+            employeeId: widget.employeeId!,
+            businessId: businessId,
+            newSite: _selectedSite!,
+            assignedBy: currentUser?.uid ?? '',
+            changedByName: currentUser?.name ?? 'Admin',
+          );
+        }
+      }
     } else {
       // 1. Create employee account
       final uid = await ref.read(employeeNotifierProvider.notifier).addEmployee(
@@ -444,6 +514,21 @@ class _AddEmployeeScreenState extends ConsumerState<AddEmployeeScreen> {
           await ref.read(employeeNotifierProvider.notifier).updateEmployee(
             uid,
             {'profileImageUrl': photoUrl},
+          );
+        }
+      }
+
+      // 3. First site assignment — no notification, nothing to "change" from.
+      if (uid != null && _selectedSite != null) {
+        final businessId = ref.read(activeBusinessIdProvider);
+        if (businessId != null) {
+          await ref.read(siteAssignmentActionsProvider.notifier).changeSite(
+            employeeId: uid,
+            businessId: businessId,
+            newSite: _selectedSite!,
+            assignedBy: currentUser?.uid ?? '',
+            changedByName: currentUser?.name ?? 'Admin',
+            notifyChange: false,
           );
         }
       }
